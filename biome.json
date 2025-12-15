@@ -1,0 +1,26 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.2.4/schema.json",
+  "formatter": {
+    "indentStyle": "space",
+    "lineWidth": 120,
+    "bracketSpacing": false
+  },
+  "assist": {"actions": {"source": {"organizeImports": "on"}}},
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noConfusingVoidType": "off"
+      },
+      "style": {
+        "noUselessElse": "off",
+        "noNonNullAssertion": "off"
+      },
+      "complexity": {
+        "noForEach": "off"
+      }
+    }
+  }
+}
