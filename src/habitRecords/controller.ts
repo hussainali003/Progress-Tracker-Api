@@ -57,11 +57,10 @@ export const uncompleteHabit = async (req: Request, res: Response) => {
     }
 
     await pg("habit_records")
-      .where({
-        habit_id: habitId,
-        user_id: userId,
-        completed_date: date,
-      })
+      .where("habit_id", habitId)
+      .where("user_id", userId)
+      .where("completed_date", ">=", `${date}T00:00:00Z`)
+      .where("completed_date", "<=", `${date}T24:00:00Z`)
       .del();
 
     res.status(200).json({message: "Habit unchecked", date});
