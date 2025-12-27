@@ -1,6 +1,6 @@
 import {Router} from "express";
 
-import {createHabit, getHabitDetail, getHabits, getHabitsWithRecords} from "./controller";
+import {createHabit, getHabitDetail, getHabits, getHabitsWithRecords, getUserHabits} from "./controller";
 
 import {authMiddleware} from "./middleware";
 
@@ -13,5 +13,7 @@ router.get("/getHabits", authMiddleware, getHabits);
 router.get("/getHabitsWithRecords", authMiddleware, getHabitsWithRecords);
 
 router.get("/:habitId/getHabitDetail", authMiddleware, getHabitDetail);
+
+router.get("/:habitId/getUserHabits", authMiddleware, getUserHabits);
 
 export default router;

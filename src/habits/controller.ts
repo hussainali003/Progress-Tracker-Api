@@ -164,3 +164,49 @@ export const getHabitDetail = async (req: Request, res: Response) => {
     res.status(500).json({message: "Failed to fetch habit detail"});
   }
 };
+
+export const getUserHabits = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({message: "Unauthorized"});
+    }
+
+    const userHabits = await pg("habits").where("user_id", userId).orderBy("id").select("id", "habit");
+
+    const habitIds = userHabits.map((habit) => habit.id);
+
+    const habitsRecords = await pg("habit_records")
+      .whereIn("habit_id", habitIds)
+      .orderBy("habit_id")
+      .select("habit_id", "completed_date");
+
+    const habitRecordIds = habitsRecords.map((record) => record.habit_id);
+
+    const rankHabits = [];
+
+    for (let i = 0; i < userHabits.length; i++) {
+      let habitRecordCount = 0;
+      for (let j = 0; j < habitRecordIds.length; j++) {
+        if (userHabits[i].id === habitRecordIds[j]) {
+          habitRecordCount = habitRecordCount + 1;
+        }
+      }
+      rankHabits.push({
+        id: userHabits[i].id,
+        name: userHabits[i].habit,
+        totalCompletedDays: habitRecordCount,
+      });
+    }
+
+    rankHabits.sort((a, b) => {
+      return b.totalCompletedDays - a.totalCompletedDays;
+    });
+
+    res.status(200).json(rankHabits);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({message: "Failed to fecth user habits"});
+  }
+};
