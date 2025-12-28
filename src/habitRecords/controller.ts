@@ -16,18 +16,21 @@ export const completeHabit = async (req: Request, res: Response) => {
       return res.status(400).json({message: "Invalid date"});
     }
 
-    const selectedDate = new Date(date);
-    const today = new Date();
+    const normalizedDate = new Date(date);
 
     // Prevent future dates
-    if (selectedDate > today) {
+    if (normalizedDate > new Date()) {
       return res.status(400).json({message: "Cannot complete future dates"});
     }
+
+    normalizedDate.setUTCHours(0, 0, 0, 0);
+
+    const completedDate = normalizedDate.toISOString();
 
     await pg("habit_records").insert({
       habit_id: habitId,
       user_id: userId,
-      completed_date: date,
+      completed_date: completedDate,
     });
 
     res.status(200).json({message: "Habit completed", date});
@@ -59,8 +62,7 @@ export const uncompleteHabit = async (req: Request, res: Response) => {
     await pg("habit_records")
       .where("habit_id", habitId)
       .where("user_id", userId)
-      .where("completed_date", ">=", `${date}T00:00:00Z`)
-      .where("completed_date", "<=", `${date}T24:00:00Z`)
+      .where("completed_date", "=", `${date}T00:00:00Z`)
       .del();
 
     res.status(200).json({message: "Habit unchecked", date});
