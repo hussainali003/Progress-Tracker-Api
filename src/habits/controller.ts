@@ -1,5 +1,7 @@
 import type {Request, Response} from "express";
 
+import {getStreaks} from "src/util";
+
 import {pg} from "../config/db";
 
 export const createHabit = async (req: Request, res: Response) => {
@@ -100,50 +102,14 @@ export const getHabitDetail = async (req: Request, res: Response) => {
     const records = await pg("habit_records")
       .where("habit_id", habitId)
       .where("user_id", userId)
-      .orderBy("completed_date", "desc")
+      .orderBy("completed_date", "asc")
       .select("completed_date");
 
-    const dates = records.map((r) => new Date(r.completed_date).toISOString().slice(0, 10));
+    // const dates = records.map((r) => new Date(r.completed_date).toISOString().slice(0, 10));
 
-    let currentStreak = 0;
-    let longestStreak = 0;
+    const dates = records.map((r) => r.completed_date);
 
-    let prevDate: Date | null = null;
-    let tempStreak = 0;
-
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-
-    for (let i = 0; i < dates.length; i++) {
-      const current = new Date(dates[i]);
-      current.setUTCHours(0, 0, 0, 0);
-
-      if (!prevDate) {
-        tempStreak = 1;
-      } else {
-        const diff = (prevDate.getTime() - current.getTime()) / (1000 * 60 * 60 * 24);
-
-        if (diff === 1) {
-          tempStreak++;
-        } else {
-          tempStreak = 1;
-        }
-      }
-
-      longestStreak = Math.max(longestStreak, tempStreak);
-      prevDate = current;
-    }
-
-    if (dates.length > 0) {
-      const last = new Date(dates[0]);
-      last.setUTCHours(0, 0, 0, 0);
-
-      const diff = (today.getTime() - last.getTime()) / (1000 * 60 * 60 * 24);
-
-      if (diff === 0 || diff === 1) {
-        currentStreak = tempStreak;
-      }
-    }
+    const streaks = getStreaks(dates);
 
     res.status(200).json({
       id: habit.id,
@@ -153,9 +119,10 @@ export const getHabitDetail = async (req: Request, res: Response) => {
       endDate: habit.end_date,
       repeatDays: habit.repeat_days,
       reminder: habit.reminder,
+      completedDates: dates,
       stats: {
-        currentStreak,
-        longestStreak,
+        currentStreak: streaks[streaks.length - 1],
+        longestStreak: Math.max(...streaks),
         totalCompletedDays: dates.length,
       },
     });
