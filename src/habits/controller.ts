@@ -177,3 +177,58 @@ export const getUserHabits = async (req: Request, res: Response) => {
     res.status(500).json({message: "Failed to fecth user habits"});
   }
 };
+
+export const updateHabitCompletedDates = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const {habitId} = req.params;
+
+    const {completedDates} = req.body;
+
+    if (!userId) {
+      res.status(401).json({message: "Unauthorized"});
+    }
+
+    await pg.transaction(async (trx) => {
+      // Remove days not in new selection
+      await trx("habit_records")
+        .where({habit_id: habitId, user_id: userId})
+        .whereNotIn(
+          "completed_date",
+          completedDates.map((d: string) => `${d}T00:00:00Z`),
+        )
+        .del();
+
+      if (completedDates.length > 0) {
+        const selectedDates = [];
+
+        for (let i = 0; i < completedDates.length; i++) {
+          selectedDates.push({habit_id: habitId, user_id: userId, completed_date: `${completedDates[i]}T00:00:00Z`});
+        }
+
+        await trx("habit_records").insert(selectedDates).onConflict(["habit_id", "completed_date"]).ignore();
+      }
+    });
+
+    const _habit = await pg("habits").where({id: habitId, user_id: userId}).first();
+
+    const records = await pg("habit_records").where({habit_id: habitId, user_id: userId}).select("completed_date");
+
+    const dates = records.map((r) => r.completed_date);
+
+    const streaks = getStreaks(dates);
+
+    res.status(200).json({
+      ..._habit,
+      completedDates: dates,
+      stats: {
+        currentStreak: streaks[streaks.length - 1],
+        longestStreak: Math.max(...streaks),
+        totalCompletedDays: dates.length,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({message: "Failed to update completed days"});
+  }
+};
