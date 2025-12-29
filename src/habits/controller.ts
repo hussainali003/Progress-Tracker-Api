@@ -212,7 +212,10 @@ export const updateHabitCompletedDates = async (req: Request, res: Response) => 
 
     const _habit = await pg("habits").where({id: habitId, user_id: userId}).first();
 
-    const records = await pg("habit_records").where({habit_id: habitId, user_id: userId}).select("completed_date");
+    const records = await pg("habit_records")
+      .where({habit_id: habitId, user_id: userId})
+      .orderBy("completed_date", "asc")
+      .select("completed_date");
 
     const dates = records.map((r) => r.completed_date);
 
