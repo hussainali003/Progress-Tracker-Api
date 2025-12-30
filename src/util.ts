@@ -7,8 +7,6 @@ const getNextDate = (currentDate: Date) => {
 export const getStreaks = (dates: Date[]) => {
   let nextDay = dates ? getNextDate(new Date()) : getNextDate(dates[0]);
 
-  console.log(dates);
-
   let tempStreak = 0;
 
   const streaks = [0];
@@ -31,6 +29,15 @@ export const getStreaks = (dates: Date[]) => {
     } else if (new Date(nextDay).toISOString().slice(0, 10) === new Date(dates[i]).toISOString().slice(0, 10)) {
       tempStreak++;
       nextDay = getNextDate(dates[i]);
+    } else if (
+      new Date(nextDay).toISOString().slice(0, 10) !== new Date(dates[i]).toISOString().slice(0, 10) &&
+      i === dates.length - 1
+    ) {
+      streaks.push(tempStreak);
+      tempStreak = 1;
+      // first we push the tempStreak previous and then push last tempStreak
+      streaks.push(tempStreak);
+      nextDay = getNextDate(dates[i]);
     } else {
       streaks.push(tempStreak);
       tempStreak = 1;
@@ -38,8 +45,10 @@ export const getStreaks = (dates: Date[]) => {
     }
   }
 
-  // dates = [1,2,3,4,5, 24,25, 27,29] || [29] [28] [28,29] new date = 29 = streaks = [0,5] nextDay = 6
-  // error = [2,3,4,5, 28,29]
+  // dates = [1,2,3,4,5, 24,25, 27,29] || [29] [28] [28,29]
+  // error = [2,3,4,5, 28,29] || [2,3,4,5,6,29] solved
+
+  console.log(streaks);
 
   if (nextDay < new Date()) {
     streaks.push(0);
