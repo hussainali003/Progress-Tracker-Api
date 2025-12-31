@@ -235,3 +235,29 @@ export const updateHabitCompletedDates = async (req: Request, res: Response) => 
     res.status(500).json({message: "Failed to update completed days"});
   }
 };
+
+export const deleteHabit = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    const habitId = Number(req.params.habitId);
+
+    if (!userId) {
+      return res.status(401).json({message: "Unauthorized"});
+    }
+
+    // habitId should not be empty and habitId should be a number
+    if (!habitId || Number.isNaN(habitId)) {
+      return res.status(400).json({message: "Invalid habit id"});
+    }
+
+    await pg.transaction(async (trx) => {
+      await trx("habits").where("user_id", "=", userId).where("id", habitId).del();
+    });
+
+    res.status(200).json({message: "Habit deleted successfully"});
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({message: "Failed to delete a habit"});
+  }
+};
