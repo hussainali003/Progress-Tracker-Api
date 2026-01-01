@@ -75,8 +75,6 @@ export const getHabitsWithRecords = async (req: Request, res: Response) => {
       completedDates: records.filter((r) => r.habit_id === habit.id).map((r) => r.completed_date),
     }));
 
-    console.log(result);
-
     res.status(200).json(result);
   } catch (err) {
     console.error(err);
@@ -259,5 +257,74 @@ export const deleteHabit = async (req: Request, res: Response) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({message: "Failed to delete a habit"});
+  }
+};
+
+export const updateHabit = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const habitId = Number(req.params.habitId);
+
+    if (!userId) {
+      return res.status(401).json({message: "Unauthorized"});
+    }
+
+    if (!habitId || Number.isNaN(habitId)) {
+      return res.status(400).json({message: "Invalid habit id"});
+    }
+
+    const {name, color, end_date, reminder, repeat_days} = req.body;
+
+    const habitDetail = await pg("habits").where({user_id: userId, id: habitId}).first();
+
+    if (!habitDetail) {
+      return res.status(404).json({message: "Habit not found"});
+    }
+
+    const updates: Record<string, any> = {};
+
+    if (name && name !== habitDetail.habit) {
+      updates.name = name;
+    }
+
+    if (color && color !== habitDetail.color) {
+      updates.color = color;
+    }
+
+    if (end_date !== habitDetail.end_date) {
+      updates.endDate = end_date;
+    }
+
+    if (reminder !== habitDetail.reminder) {
+      updates.reminder = reminder;
+    }
+
+    if (Array.isArray(repeat_days)) {
+      const normalized = [...repeat_days].sort();
+      if (JSON.stringify(habitDetail.repeat_days) !== JSON.stringify(normalized)) {
+        updates.repeatDays = JSON.stringify(normalized);
+      }
+    }
+
+    // nothing changed
+    if (Object.keys(updates).length === 0) {
+      return res.status(200).json({message: "No changes"});
+    }
+
+    await pg("habits").where({user_id: userId, id: habitId}).update({
+      habit: updates.name,
+      color: updates.color,
+      reminder: updates.reminder,
+      repeat_days: updates.repeatDays,
+      end_date: updates.endDate,
+      updated_at: pg.fn.now(),
+    });
+
+    updates.repeatDays = repeat_days;
+
+    res.status(200).json({...updates});
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({message: "Failed to update habit"});
   }
 };

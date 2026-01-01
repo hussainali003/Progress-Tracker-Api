@@ -7,6 +7,7 @@ import {
   getHabits,
   getHabitsWithRecords,
   getUserHabits,
+  updateHabit,
   updateHabitCompletedDates,
 } from "./controller";
 
@@ -27,5 +28,7 @@ router.get("/:habitId/getUserHabits", authMiddleware, getUserHabits);
 router.post("/:habitId/updateHabitCompletedDates", authMiddleware, updateHabitCompletedDates);
 
 router.delete("/:habitId/deleteHabit", authMiddleware, deleteHabit);
+
+router.patch("/:habitId/updateHabit", authMiddleware, updateHabit);
 
 export default router;
