@@ -107,3 +107,9 @@ export function getHabitMinutesSpentInWeek(lastSevenDates: any) {
 
   return currentWeekMinutesSpent;
 }
+
+export function getYearCompletedDates(dates: any) {
+  const currentYear = new Date().getFullYear();
+
+  return dates.filter((d: Date) => d.getFullYear() === currentYear).length;
+}

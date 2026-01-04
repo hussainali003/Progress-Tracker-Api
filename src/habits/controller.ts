@@ -1,6 +1,6 @@
 import type {Request, Response} from "express";
 
-import {getHabitMinutesSpentInWeek, getStreaks} from "src/util";
+import {getHabitMinutesSpentInWeek, getStreaks, getYearCompletedDates} from "src/util";
 
 import {pg} from "../config/db";
 
@@ -103,8 +103,6 @@ export const getHabitDetail = async (req: Request, res: Response) => {
       .orderBy("completed_date", "asc")
       .select("completed_date", "minutes_spent");
 
-    // const dates = records.map((r) => new Date(r.completed_date).toISOString().slice(0, 10));
-
     const dates = records.map((r) => r.completed_date);
 
     const lastSevenRecords = [];
@@ -132,6 +130,7 @@ export const getHabitDetail = async (req: Request, res: Response) => {
       stats: {
         currentStreak: streaks[streaks.length - 1],
         longestStreak: Math.max(...streaks),
+        yearCompletedDates: getYearCompletedDates(dates),
         totalCompletedDays: dates.length,
       },
     });
