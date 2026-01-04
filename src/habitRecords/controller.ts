@@ -6,7 +6,7 @@ export const completeHabit = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const {habitId} = req.params;
-    const {date} = req.body;
+    const {date, minutes_spent} = req.body;
 
     if (!userId) {
       return res.status(401).json({message: "Unauthorized"});
@@ -31,6 +31,7 @@ export const completeHabit = async (req: Request, res: Response) => {
       habit_id: habitId,
       user_id: userId,
       completed_date: completedDate,
+      minutes_spent,
     });
 
     res.status(200).json({message: "Habit completed", date});
