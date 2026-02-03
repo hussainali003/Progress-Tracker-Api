@@ -16,6 +16,7 @@ export const completeHabit = async (req: Request, res: Response) => {
       return res.status(400).json({message: "Invalid date"});
     }
 
+    // convert date string [2026-02-2026] to Date [2026-02-03T00:00:00.000Z]
     const normalizedDate = new Date(date);
 
     // Prevent future dates
@@ -23,9 +24,8 @@ export const completeHabit = async (req: Request, res: Response) => {
       return res.status(400).json({message: "Cannot complete future dates"});
     }
 
-    normalizedDate.setUTCHours(0, 0, 0, 0);
-
-    const completedDate = normalizedDate.toISOString();
+    // convert 2026-02-03T00:00:00.000Z format to YYYY-MM-DD format
+    const completedDate = normalizedDate.toLocaleDateString("en-CA");
 
     await pg("habit_records").insert({
       habit_id: habitId,
@@ -34,19 +34,19 @@ export const completeHabit = async (req: Request, res: Response) => {
       minutes_spent,
     });
 
-    res.status(200).json({message: "Habit completed", date});
+    res.status(200).json({message: "Habit check", date});
   } catch (err: any) {
     if (err.code === "23505") {
       console.error(err);
-      return res.status(409).json({message: "Already completed"});
+      return res.status(409).json({message: "Already check"});
     }
 
     console.error(err);
-    res.status(500).json({message: "Failed to complete habit"});
+    res.status(500).json({message: "Failed to check habit"});
   }
 };
 
-export const uncompleteHabit = async (req: Request, res: Response) => {
+export const unCompleteHabit = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const {habitId} = req.params;
@@ -63,12 +63,12 @@ export const uncompleteHabit = async (req: Request, res: Response) => {
     await pg("habit_records")
       .where("habit_id", habitId)
       .where("user_id", userId)
-      .where("completed_date", "=", `${date}T00:00:00Z`)
+      .where("completed_date", "=", `${date}`)
       .del();
 
     res.status(200).json({message: "Habit unchecked", date});
   } catch (err) {
     console.error(err);
-    res.status(500).json({message: "Failed to uncomplete habit"});
+    res.status(500).json({message: "Failed to unchecked habit"});
   }
 };
