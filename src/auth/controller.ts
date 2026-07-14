@@ -1,8 +1,12 @@
+import crypto from "node:crypto";
+
 import type {Request, Response} from "express";
 
 import jwt from "jsonwebtoken";
 
 import {pg} from "../config/db";
+
+import {sendPasswordResetEmail} from "./mail";
 
 export const register = async (req: Request, res: Response) => {
   const {name, email, password} = req.body;
@@ -63,4 +67,53 @@ export const login = async (req: Request, res: Response) => {
     name: user.name,
     token,
   });
+};
+
+export const forgotPassword = async (req: Request, res: Response) => {
+  const {email} = req.body;
+
+  const user = await pg("users").where("email", email).first();
+
+  if (user) {
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+    await pg("password_resets").insert({
+      user_id: user.id,
+      token: hashedToken,
+      expires_at: expiresAt,
+    });
+
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${rawToken}`;
+
+    await sendPasswordResetEmail(email, resetLink);
+  }
+
+  res.status(200).json({message: "If that email exists, a reset link has been sent."});
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  const {token, password} = req.body;
+
+  const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+  const resetRecord = await pg("password_resets")
+    .where("token", hashedToken)
+    .where("used", false)
+    .where("expires_at", ">", pg.fn.now())
+    .first();
+
+  if (!resetRecord) {
+    res.status(400).json({message: "Invalid or expired reset token"});
+    return;
+  }
+
+  await pg("users")
+    .where("id", resetRecord.user_id)
+    .update({password: pg.raw(`crypt(?, gen_salt('bf'))`, [password])});
+
+  await pg("password_resets").where("id", resetRecord.id).update({used: true});
+
+  res.status(200).json({message: "Password has been reset successfully"});
 };
