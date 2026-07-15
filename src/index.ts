@@ -30,6 +30,8 @@ app.use("/habits", habitsRoute);
 
 app.use("/habitRecords", habitRecordsRoute);
 
-app.listen(3000, () => {
-  console.log(`Example app listening on port 3000`);
+const port = Number(process.env.PORT) || 3000;
+
+app.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
 });
