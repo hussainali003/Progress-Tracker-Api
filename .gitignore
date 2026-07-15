@@ -7,7 +7,7 @@
 
 # Editor/IDE Config (Optional, but recommended for clean repos)
 .vscode/
-
+dist/
 # Build/Logs (Common best practice)
 npm-debug.log*
 .DS_Store
