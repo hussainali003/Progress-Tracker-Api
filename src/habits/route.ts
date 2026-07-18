@@ -1,5 +1,5 @@
 import {Router} from "express";
-
+import {authMiddleware} from "../middleware/auth";
 import {
   createHabit,
   deleteHabit,
@@ -10,8 +10,6 @@ import {
   updateHabit,
   updateHabitCompletedDates,
 } from "./controller";
-
-import {authMiddleware} from "./middleware";
 
 const router = Router();
 

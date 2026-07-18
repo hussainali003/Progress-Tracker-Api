@@ -69,6 +69,27 @@ export const login = async (req: Request, res: Response) => {
   });
 };
 
+export const me = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({message: "Unauthorized"});
+    }
+
+    const user = await pg("users").where("id", userId).first();
+
+    if (!user) {
+      return res.status(404).json({message: "User not found."});
+    }
+
+    res.status(200).json({id: user.id, name: user.name});
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({message: "Failed to fetch user"});
+  }
+};
+
 export const forgotPassword = async (req: Request, res: Response) => {
   const {email} = req.body;
 

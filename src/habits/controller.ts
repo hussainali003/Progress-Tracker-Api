@@ -1,8 +1,6 @@
 import type {Request, Response} from "express";
-
-import {getHabitMinutesSpentInWeek, getStreaks, getYearCompletedDates} from "../util";
-
 import {pg} from "../config/db";
+import {getHabitMinutesSpentInWeek, getStreaks, getYearCompletedDates} from "../util";
 
 export const createHabit = async (req: Request, res: Response) => {
   try {
