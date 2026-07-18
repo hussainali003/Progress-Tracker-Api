@@ -25,7 +25,10 @@ Express 5, Knex + `pg` (Postgres, hosted on Neon), `jsonwebtoken` (auth), `resen
 - `/habitRecords` → [src/habitRecords/route.ts](src/habitRecords/route.ts)
 
 ### Feature folder pattern
-Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) and `route.ts` (wires handlers to an Express `Router`, exported as default). `habits` and `habitRecords` also have their own `middleware.ts` with an `authMiddleware` that verifies the JWT (`jwt.verify(token, process.env.JWT_SECRET)`) and sets `req.user = { id: decoded.sub }`. `auth` routes (login/register/forgot-password/reset-password) are intentionally unprotected — no `middleware.ts`.
+Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) and `route.ts` (wires handlers to an Express `Router`, exported as default).
+
+### Shared middleware
+[src/middleware/auth.ts](src/middleware/auth.ts) exports the single `authMiddleware` used by every protected route across all features — it verifies the JWT (`jwt.verify(token, process.env.JWT_SECRET)`) and sets `req.user = { id: decoded.sub }`. Import it as `../middleware/auth`; do not add per-feature copies. The `auth` login/register/forgot-password/reset-password routes are intentionally unprotected — only `GET /auth/me` is guarded.
 
 ### Auth
 - Passwords are hashed/verified via Postgres's `pgcrypto` extension directly in SQL (`crypt(?, gen_salt('bf'))` on insert, `password = crypt(?, password)` on compare) — not in JS, despite `bcryptjs` being a listed dependency.

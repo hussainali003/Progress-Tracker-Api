@@ -1,7 +1,6 @@
 import {Router} from "express";
-
+import {authMiddleware} from "../middleware/auth";
 import {completeHabit, unCompleteHabit} from "./controller";
-import {authMiddleware} from "./middleware";
 
 const router = Router();
 
