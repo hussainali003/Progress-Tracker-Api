@@ -50,21 +50,6 @@ export const getHabits = async (req: Request, res: Response) => {
   }
 };
 
-// Shared by the REST handler below and the GraphQL `habits` resolver
-// (src/graphql/resolvers.ts) — same tables, same 3-day record window.
-export const fetchHabitsWithRecords = async (userId: string) => {
-  const habits = await pg("habits").where("user_id", userId).select("id", "habit", "color");
-
-  const habitIds = habits.map((h) => h.id);
-
-  const records = await pg("habit_records")
-    .whereIn("habit_id", habitIds)
-    .where("completed_date", ">=", pg.raw("CURRENT_DATE - INTERVAL '3 days'"))
-    .select("habit_id", "completed_date", "minutes_spent");
-
-  return {habits, records};
-};
-
 export const getHabitsWithRecords = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -73,7 +58,14 @@ export const getHabitsWithRecords = async (req: Request, res: Response) => {
       return res.status(401).json({message: "Unauthorized"});
     }
 
-    const {habits, records} = await fetchHabitsWithRecords(userId);
+    const habits = await pg("habits").where("user_id", userId).select("id", "habit", "color");
+
+    const habitIds = habits.map((h) => h.id);
+
+    const records = await pg("habit_records")
+      .whereIn("habit_id", habitIds)
+      .where("completed_date", ">=", pg.raw("CURRENT_DATE - INTERVAL '3 days'"))
+      .select("habit_id", "completed_date");
 
     // merge
     const result = habits.map((habit) => ({
