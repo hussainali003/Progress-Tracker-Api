@@ -23,17 +23,6 @@ Express 5, Knex + `pg` (Postgres, hosted on Neon), `jsonwebtoken` (auth), `resen
 - `/auth` → [src/auth/route.ts](src/auth/route.ts)
 - `/habits` → [src/habits/route.ts](src/habits/route.ts)
 - `/habitRecords` → [src/habitRecords/route.ts](src/habitRecords/route.ts)
-- `/graphql` → [src/graphql/index.ts](src/graphql/index.ts) (GraphQL, alongside REST — see below)
-
-### GraphQL
-A `graphql-yoga` endpoint is mounted at `/graphql` next to the REST routes (which stay as-is). It lives in [src/graphql/](src/graphql/):
-- [schema.ts](src/graphql/schema.ts) — SDL type definitions. Field names mirror the frontend's `HabitListItem` type (hence the capitalized `TimeDurations`).
-- [resolvers.ts](src/graphql/resolvers.ts) — resolvers. They reuse the shared Knex query functions exported from the feature controllers (e.g. `fetchHabitsWithRecords` in [src/habits/controller.ts](src/habits/controller.ts)) — don't re-write queries inside resolvers.
-- [index.ts](src/graphql/index.ts) — the yoga instance. Its context verifies the `Authorization: Bearer <token>` header via `getUserIdFromAuthHeader` from [src/middleware/auth.ts](src/middleware/auth.ts) (same logic as REST, not a copy) and sets `context.userId` (null when unauthenticated). Resolvers must throw a `GraphQLError` with `extensions.code = "UNAUTHENTICATED"` when `context.userId` is null — never silently return empty data.
-
-To add a resolver: add the type/field to the SDL in `schema.ts`, implement it in `resolvers.ts` (extracting a shared query function from the relevant controller if one doesn't exist yet), and keep nullability (`!`) accurate — the frontend derives its types from it.
-
-GraphiQL is enabled only when `NODE_ENV !== "production"`. Because GraphiQL loads its UI assets from a CDN, helmet's CSP is disabled in dev (`contentSecurityPolicy: false` in [src/index.ts](src/index.ts)) and fully on in production. Auth stays on REST (`/auth/*`) — do not add auth mutations to GraphQL.
 
 ### Feature folder pattern
 Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) and `route.ts` (wires handlers to an Express `Router`, exported as default).
