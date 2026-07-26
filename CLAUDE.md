@@ -14,7 +14,7 @@ No test runner is configured.
 
 ## Tech stack
 
-Express 5, Knex + `pg` (Postgres, hosted on Neon), `jsonwebtoken` (auth), `resend` (email), TypeScript (`NodeNext` module resolution), Biome (format + lint). Husky is installed via the `prepare` script but no git hooks are actually configured (`.husky/` only contains husky's internal `_` dir) — don't assume lint runs on commit.
+Express 5, Knex + `pg` (Postgres, hosted on Neon), `jsonwebtoken` (auth), `resend` (email), TypeScript (`NodeNext` module resolution), Biome (format + lint). There are no git hooks — husky was removed because it was never configured to run anything. `npm run lint` and `npm run check-ts` are manual; nothing runs automatically on commit or push.
 
 ## Architecture
 
