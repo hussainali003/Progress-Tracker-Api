@@ -18,19 +18,17 @@ Express 5, Knex + `pg` (Postgres, hosted on Neon), `jsonwebtoken` (auth), `resen
 
 ## Architecture
 
+This API is auth-only: habit data moved to Hasura GraphQL (the frontend talks to Hasura directly — see Progress-Tracker-Web PR #48), so the old `/habits` and `/habitRecords` REST features were removed. This service now exists to issue Hasura-compatible JWTs and handle account flows.
+
 ### Routing
-[src/index.ts](src/index.ts) is the entrypoint: sets up Express middleware (`cors`, `helmet`, `pino-http`, `express.json()`) and mounts each feature's router:
+[src/index.ts](src/index.ts) is the entrypoint: sets up Express middleware (`cors`, `helmet`, `pino-http`, `express.json()`) and mounts the single feature router:
 - `/auth` → [src/auth/route.ts](src/auth/route.ts)
-- `/habits` → [src/habits/route.ts](src/habits/route.ts)
-- `/habitRecords` → [src/habitRecords/route.ts](src/habitRecords/route.ts)
 
 ### Feature folder pattern
-Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) and `route.ts` (wires handlers to an Express `Router`, exported as default). Route paths are verb-style rather than RESTful (e.g. `POST /habits/createHabit`, `GET /habits/:habitId/getHabitDetail`, `PATCH /habits/:habitId/updateHabit`) — follow that style when adding endpoints.
-
-[src/util.ts](src/util.ts) holds shared date/stats helpers (`getStreaks`, `getHabitMinutesSpentInWeek`, `getYearCompletedDates`) used by the habits controller to compute streaks and weekly minutes for habit detail responses.
+Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) and `route.ts` (wires handlers to an Express `Router`, exported as default). Route paths are verb-style rather than RESTful (e.g. `POST /auth/login`) — follow that style when adding endpoints.
 
 ### Shared middleware
-[src/middleware/auth.ts](src/middleware/auth.ts) exports the single `authMiddleware` used by every protected route across all features — it verifies the JWT (`jwt.verify(token, process.env.JWT_SECRET)`) and sets `req.user = { id: decoded.sub }`. Import it as `../middleware/auth`; do not add per-feature copies. The `auth` login/register/forgot-password/reset-password routes are intentionally unprotected — only `GET /auth/me` is guarded.
+[src/middleware/auth.ts](src/middleware/auth.ts) exports the single `authMiddleware` used by every protected route — it verifies the JWT (`jwt.verify(token, process.env.JWT_SECRET)`) and sets `req.user = { id: decoded.sub }`. Import it as `../middleware/auth`; do not add per-feature copies. The `auth` login/register/forgot-password/reset-password routes are intentionally unprotected — only `GET /auth/me` is guarded.
 
 ### Auth
 - Passwords are hashed/verified via Postgres's `pgcrypto` extension directly in SQL (`crypt(?, gen_salt('bf'))` on insert, `password = crypt(?, password)` on compare) — not in JS, despite `bcryptjs` being a listed dependency.
@@ -39,7 +37,7 @@ Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) 
 - Forgot/reset password: [src/auth/controller.ts](src/auth/controller.ts) generates a random token, stores its SHA-256 hash + expiry in a `password_resets` table, and emails a reset link via [src/auth/mail.ts](src/auth/mail.ts) (Resend). `forgot-password` always returns a generic response regardless of whether the email exists, to avoid user enumeration.
 
 ### DB access
-[src/config/db.ts](src/config/db.ts) exports a single Knex instance (`pg`) configured from `PG_CONNECTION_STRING`. There is no migration framework and no schema files in the repo — table schemas (`users`, `habits`, `habit_records`, `password_resets`) must be inferred from the queries; schema changes are run manually against Neon.
+[src/config/db.ts](src/config/db.ts) exports a single Knex instance (`pg`) configured from `PG_CONNECTION_STRING`. There is no migration framework and no schema files in the repo — table schemas (`users`, `password_resets`) must be inferred from the queries; schema changes are run manually against Neon. The `habits`/`habit_records` tables still exist in the same database but are owned by Hasura now — this API doesn't touch them.
 
 ### Env vars
 `PG_CONNECTION_STRING`, `JWT_SECRET`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `FRONTEND_URL` (used to build the password-reset link). All in `.env` (gitignored).
@@ -47,7 +45,7 @@ Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) 
 ## Conventions
 
 - Biome: 2-space indent, 120-char line width, no bracket spacing (`{foo}` not `{ foo }`).
-- Route handlers generally wrap logic in `try/catch` and return JSON with an explicit status code — except `login`/`register`/`forgot-password`/`reset-password`, which currently don't (pre-existing inconsistency, not a pattern to intentionally break from without reason).
+- Only the `me` handler wraps logic in `try/catch` and returns JSON with an explicit status code — `login`/`register`/`forgot-password`/`reset-password` currently don't (pre-existing inconsistency, not a pattern to intentionally break from without reason).
 - No request-body validation library is actually wired up (`express-validator` is a dependency but unused) — handlers destructure `req.body` directly.
 - Several listed dependencies are entirely unused in `src/` (`axios`, `bcryptjs`, `envalid`, `express-rate-limit`, `express-validator`, `http-status-codes`, `luxon`) — don't take their presence as a signal they're part of the stack.
 
