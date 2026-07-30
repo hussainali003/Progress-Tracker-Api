@@ -45,6 +45,12 @@ Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) 
 ## Conventions
 
 - Biome: 2-space indent, 120-char line width, no bracket spacing (`{foo}` not `{ foo }`).
+- Comments follow the [Airbnb JS style guide](https://github.com/airbnb/javascript#comments):
+  - `/** ... */` for multi-line comments, `//` for single-line ones. Don't write a multi-line comment as a stack of `//` lines.
+  - Put a single-line comment on its own line above its subject, with a blank line before it unless it's the first line of a block.
+  - Start every comment with a space after the `//` or `*`.
+  - Prefix actionable comments: `// TODO:` for a solution still to be implemented, `// FIXME:` for a problem that needs revisiting. Plain comments are for explanation, not open work items.
+- Don't shorten a comment just to fit one line — if the *why* is load-bearing and not inferable from the code (deployment quirks, protocol details, security reasoning), keep the detail and use a `/** ... */` block. Biome's 120-char width doesn't reflow comments.
 - Only the `me` handler wraps logic in `try/catch` and returns JSON with an explicit status code — `login`/`register`/`forgot-password`/`reset-password` currently don't (pre-existing inconsistency, not a pattern to intentionally break from without reason).
 - No request-body validation library is actually wired up (`express-validator` is a dependency but unused) — handlers destructure `req.body` directly.
 - Several listed dependencies are entirely unused in `src/` (`axios`, `bcryptjs`, `envalid`, `express-rate-limit`, `express-validator`, `http-status-codes`, `luxon`) — don't take their presence as a signal they're part of the stack.
