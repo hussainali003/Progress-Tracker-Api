@@ -2,8 +2,10 @@ import type {NextFunction, Request, Response} from "express";
 
 import jwt from "jsonwebtoken";
 
-// Shared across every protected route — verifies the JWT and puts the user id
-// on the request for handlers to read via `req.user?.id`.
+/**
+ * Shared across every protected route — verifies the JWT and puts the user id
+ * on the request for handlers to read via `req.user?.id`.
+ */
 export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
 
