@@ -5,6 +5,7 @@ import helmet from "helmet";
 import logger from "pino-http";
 
 import authRoute from "./auth/route";
+import mcpRoute from "./mcp/route";
 import notificationRoute from "./notifications/route";
 
 const app = express();
@@ -32,6 +33,8 @@ app.get("/", (_req, res) => {
 app.use("/auth", authRoute);
 
 app.use(notificationRoute);
+
+app.use(mcpRoute);
 
 const port = Number(process.env.PORT) || 3000;
 
