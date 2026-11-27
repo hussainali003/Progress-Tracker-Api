@@ -8,7 +8,12 @@ import {buildServer} from "./server";
 /** Claude sends `Authorization: Bearer <MCP_TOKEN>` as a custom connector header. */
 function requireToken(req: Request, res: Response, next: NextFunction) {
   const expected = process.env.MCP_TOKEN;
-  const given = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "";
+
+  // Lenient on purpose: connector forms make it easy to type "Bearer<token>" without the space.
+  const given = (req.headers.authorization ?? "")
+    .trim()
+    .replace(/^Bearer\s*/i, "")
+    .trim();
   const ok =
     Boolean(expected) &&
     given.length === expected?.length &&

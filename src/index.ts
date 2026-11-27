@@ -24,7 +24,24 @@ app.use(cors());
 
 app.use(helmet());
 
-app.use(logger());
+/**
+ * Request logs go to Render, so secrets are scrubbed first: the JWT or MCP token in Authorization,
+ * Hasura's x-hook-secret, and the cron-job.org ?key= that is part of the URL.
+ */
+app.use(
+  logger({
+    redact: {
+      paths: ["req.headers.authorization", 'req.headers["x-hook-secret"]', "req.query.key"],
+      censor: "[Redacted]",
+    },
+    serializers: {
+      req(req) {
+        req.url = req.url?.replace(/([?&]key=)[^&]*/, "$1[Redacted]");
+        return req;
+      },
+    },
+  }),
+);
 
 app.get("/", (_req, res) => {
   res.send("Hello Worldasdasdas!");
