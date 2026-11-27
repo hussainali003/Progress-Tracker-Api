@@ -25,7 +25,7 @@ const DATE = z
 const KEY = z.string().describe("Card key such as STORY-12");
 const PREFIX = z.string().describe("Project key prefix such as STORY");
 const STATUS = z.enum(STATUSES).describe("later, todo, doing (in progress), review or done");
-const OWNER = z.enum(["me", "claude"]).describe("me = Hussain, claude = Claude");
+const OWNER = z.enum(["me", "claude"]).describe("me = the board's owner (the person who connected), claude = Claude");
 
 /** Runs a tool body and turns its result or a ToolError into MCP content. */
 async function run(fn: () => Promise<unknown>) {
@@ -43,7 +43,7 @@ const WRITE = {readOnlyHint: false, destructiveHint: false, openWorldHint: false
 
 /**
  * One MCP server per request (stateless Streamable HTTP). There are deliberately no delete tools:
- * Claude can create and change things, and Hussain deletes in the app.
+ * Claude can create and change things, and the board's owner deletes in the app.
  */
 export function buildServer() {
   const server = new McpServer({name: "progress-tracker", version: "1.0.0"});
@@ -52,7 +52,7 @@ export function buildServer() {
     "list_projects",
     {
       title: "List projects",
-      description: "All of Hussain's projects with open, overdue, due-this-week and in-review counts.",
+      description: "All of the board owner's projects with open, overdue, due-this-week and in-review counts.",
       annotations: {title: "List projects", ...READ},
     },
     () => run(listProjects),
@@ -155,7 +155,7 @@ export function buildServer() {
         title: z.string().min(1).max(200),
         details: z.string().optional().describe("Markdown"),
         area: z.string().optional().describe("Existing area name"),
-        owner: OWNER.optional().describe("Defaults to me (Hussain)"),
+        owner: OWNER.optional().describe("Defaults to me (the board's owner)"),
         status: STATUS.optional().describe("Defaults to todo"),
         due_date: DATE.optional(),
         file_ref: z.string().optional().describe("Related file, e.g. 02_Characters.md"),
@@ -214,7 +214,7 @@ export function buildServer() {
     {
       title: "Send notification",
       description:
-        "Send Hussain a notification (inbox plus push to his devices, unless it's his quiet hours). With card_key, tapping it opens that card.",
+        "Send the board's owner a notification (inbox plus push to their devices, unless it's their quiet hours). With card_key, tapping it opens that card.",
       inputSchema: {title: z.string().min(1).max(120), body: z.string().optional(), card_key: KEY.optional()},
       annotations: {title: "Send notification", ...WRITE, openWorldHint: true},
     },

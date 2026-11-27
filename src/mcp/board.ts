@@ -2,9 +2,11 @@ import {DateTime} from "luxon";
 
 import {pg} from "../config/db";
 import {ZONE} from "../notifications/settings";
+import {requestUser} from "./context";
 
 /**
- * Data access for the MCP tools. Every query is scoped to OWNER_USER_ID, and every write is
+ * Data access for the MCP tools. Every query is scoped to the user whose connector token made the
+ * request (see context.ts), and every write is
  * marked as Claude's (created_by / author = 'claude'). Cards are always addressed by key
  * (STORY-12), never by uuid.
  */
@@ -15,8 +17,8 @@ export type Status = (typeof STATUSES)[number];
 export class ToolError extends Error {}
 
 export function ownerId(): number {
-  const id = Number(process.env.OWNER_USER_ID);
-  if (!Number.isInteger(id) || id <= 0) throw new ToolError("OWNER_USER_ID is not set on the server.");
+  const id = requestUser.getStore();
+  if (!id) throw new ToolError("This request has no user. Reconnect with your personal connector token.");
   return id;
 }
 
