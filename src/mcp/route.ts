@@ -19,6 +19,9 @@ function requireToken(req: Request, res: Response, next: NextFunction) {
     given.length === expected?.length &&
     crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected));
   if (!ok) {
+    // A one-way fingerprint tells an old token from a new one in the logs without ever logging the token itself.
+    const fingerprint = given ? crypto.createHash("sha256").update(given).digest("hex").slice(0, 8) : "none";
+    req.log.warn({givenLength: given.length, fingerprint, configured: Boolean(expected)}, "mcp token rejected");
     res.status(401).json({jsonrpc: "2.0", error: {code: -32001, message: "Unauthorized"}, id: null});
     return;
   }
