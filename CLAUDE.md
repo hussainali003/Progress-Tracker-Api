@@ -14,18 +14,24 @@ No test runner is configured.
 
 ## Tech stack
 
-Express 5, Knex + `pg` (Postgres, hosted on Neon), `jsonwebtoken` (auth), `resend` (email), TypeScript (`NodeNext` module resolution), Biome (format + lint). There are no git hooks — husky was removed because it was never configured to run anything. `npm run lint` and `npm run check-ts` are manual; nothing runs automatically on commit or push.
+Express 5, Knex + `pg` (Postgres, hosted on Neon), `jsonwebtoken` (auth), `resend` (email), `web-push` (Web Push with VAPID), `luxon` (Asia/Karachi dates), TypeScript (`NodeNext` module resolution), Biome (format + lint). There are no git hooks — husky was removed because it was never configured to run anything. `npm run lint` and `npm run check-ts` are manual; nothing runs automatically on commit or push.
 
 ## Architecture
 
-This API is auth-only: habit data moved to Hasura GraphQL (the frontend talks to Hasura directly — see Progress-Tracker-Web PR #48), so the old `/habits` and `/habitRecords` REST features were removed. This service now exists to issue Hasura-compatible JWTs and handle account flows.
+App data lives in Hasura GraphQL (the frontend talks to Hasura directly), and the schema and Hasura metadata are code in the **Progress-Tracker-Hasura** repo. This service issues Hasura-compatible JWTs, handles account flows, and serves the few REST routes outside services must call: `/health`, `/cron/tick`, `/hooks/push` (and `/mcp` in Phase 3). Don't add other REST routes for app data. Hosted on Render's free plan (sleeps after ~15 idle minutes, no persistent disk — keep all state in Postgres); `main` auto-deploys.
 
 ### Routing
 [src/index.ts](src/index.ts) is the entrypoint: sets up Express middleware (`cors`, `helmet`, `pino-http`, `express.json()`) and mounts the single feature router:
 - `/auth` → [src/auth/route.ts](src/auth/route.ts)
+- `/health`, `/cron/tick`, `/hooks/push` → [src/notifications/route.ts](src/notifications/route.ts) (mounted at the root)
 
 ### Feature folder pattern
 Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) and `route.ts` (wires handlers to an Express `Router`, exported as default). Route paths are verb-style rather than RESTful (e.g. `POST /auth/login`) — follow that style when adding endpoints.
+
+### Notifications
+- [push.ts](src/notifications/push.ts) `pushNotification(id)`: skips if already pushed, push is off, or it's quiet hours in Asia/Karachi (except `kind = test`); sends to every `push_subscriptions` row, deletes ones that answer 404/410, bumps `failure_count` on other errors, and sets `pushed_at` when at least one device got it.
+- [reminders.ts](src/notifications/reminders.ts) `runReminders(userId)`: once the Karachi time passes `morning_time` / `evening_time`, inserts that day's reminder with `dedupe_key` `morning:YYYY-MM-DD` / `evening:YYYY-MM-DD`; `on conflict do nothing` makes the 10-minute ticks idempotent.
+- `/hooks/push` always answers 200 once the secret matches, so Hasura doesn't retry things a retry can't fix.
 
 ### Shared middleware
 [src/middleware/auth.ts](src/middleware/auth.ts) exports the single `authMiddleware` used by every protected route — it verifies the JWT (`jwt.verify(token, process.env.JWT_SECRET)`) and sets `req.user = { id: decoded.sub }`. Import it as `../middleware/auth`; do not add per-feature copies. The `auth` login/register/forgot-password/reset-password routes are intentionally unprotected — only `GET /auth/me` is guarded.
@@ -37,10 +43,10 @@ Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) 
 - Forgot/reset password: [src/auth/controller.ts](src/auth/controller.ts) generates a random token, stores its SHA-256 hash + expiry in a `password_resets` table, and emails a reset link via [src/auth/mail.ts](src/auth/mail.ts) (Resend). `forgot-password` always returns a generic response regardless of whether the email exists, to avoid user enumeration.
 
 ### DB access
-[src/config/db.ts](src/config/db.ts) exports a single Knex instance (`pg`) configured from `PG_CONNECTION_STRING`. There is no migration framework and no schema files in the repo — table schemas (`users`, `password_resets`) must be inferred from the queries; schema changes are run manually against Neon. The `habits`/`habit_records` tables still exist in the same database but are owned by Hasura now — this API doesn't touch them.
+[src/config/db.ts](src/config/db.ts) exports a single Knex instance (`pg`) configured from `PG_CONNECTION_STRING`. There is no migration framework and no schema files in the repo — table schemas (`users`, `password_resets`) must be inferred from the queries; schema changes are run manually against Neon. The v2 tables (projects, cards, notifications, push_subscriptions, notification_settings, …) are created by migrations in Progress-Tracker-Hasura; this API reads and writes them directly with Knex. Inserting into `notifications` fires the Hasura event trigger `notification_created`, even when the insert comes from here.
 
 ### Env vars
-`PG_CONNECTION_STRING`, `JWT_SECRET`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `FRONTEND_URL` (used to build the password-reset link). All in `.env` (gitignored).
+`PG_CONNECTION_STRING`, `JWT_SECRET`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `FRONTEND_URL` (used to build the password-reset link), `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET` (the `?key=` cron-job.org sends), `HOOK_SECRET` (the `x-hook-secret` header Hasura's event trigger sends). Locally in `.env` (gitignored); in production they are Render environment variables.
 
 ## Conventions
 
@@ -53,7 +59,7 @@ Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) 
 - Don't shorten a comment just to fit one line — if the *why* is load-bearing and not inferable from the code (deployment quirks, protocol details, security reasoning), keep the detail and use a `/** ... */` block. Biome's 120-char width doesn't reflow comments.
 - Only the `me` handler wraps logic in `try/catch` and returns JSON with an explicit status code — `login`/`register`/`forgot-password`/`reset-password` currently don't (pre-existing inconsistency, not a pattern to intentionally break from without reason).
 - No request-body validation library is actually wired up (`express-validator` is a dependency but unused) — handlers destructure `req.body` directly.
-- Several listed dependencies are entirely unused in `src/` (`axios`, `bcryptjs`, `envalid`, `express-rate-limit`, `express-validator`, `http-status-codes`, `luxon`) — don't take their presence as a signal they're part of the stack.
+- Several listed dependencies are entirely unused in `src/` (`axios`, `bcryptjs`, `envalid`, `express-rate-limit`, `express-validator`, `http-status-codes`) — don't take their presence as a signal they're part of the stack.
 
 ## Issue workflow
 
