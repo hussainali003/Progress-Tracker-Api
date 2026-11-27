@@ -14,16 +14,17 @@ No test runner is configured.
 
 ## Tech stack
 
-Express 5, Knex + `pg` (Postgres, hosted on Neon), `jsonwebtoken` (auth), `resend` (email), `web-push` (Web Push with VAPID), `luxon` (Asia/Karachi dates), TypeScript (`NodeNext` module resolution), Biome (format + lint). There are no git hooks — husky was removed because it was never configured to run anything. `npm run lint` and `npm run check-ts` are manual; nothing runs automatically on commit or push.
+Express 5, `@modelcontextprotocol/sdk` + `zod` (MCP server), Knex + `pg` (Postgres, hosted on Neon), `jsonwebtoken` (auth), `resend` (email), `web-push` (Web Push with VAPID), `luxon` (Asia/Karachi dates), TypeScript (`NodeNext` module resolution), Biome (format + lint). There are no git hooks — husky was removed because it was never configured to run anything. `npm run lint` and `npm run check-ts` are manual; nothing runs automatically on commit or push.
 
 ## Architecture
 
-App data lives in Hasura GraphQL (the frontend talks to Hasura directly), and the schema and Hasura metadata are code in the **Progress-Tracker-Hasura** repo. This service issues Hasura-compatible JWTs, handles account flows, and serves the few REST routes outside services must call: `/health`, `/cron/tick`, `/hooks/push` (and `/mcp` in Phase 3). Don't add other REST routes for app data. Hosted on Render's free plan (sleeps after ~15 idle minutes, no persistent disk — keep all state in Postgres); `main` auto-deploys.
+App data lives in Hasura GraphQL (the frontend talks to Hasura directly), and the schema and Hasura metadata are code in the **Progress-Tracker-Hasura** repo. This service issues Hasura-compatible JWTs, handles account flows, and serves the few REST routes outside services must call: `/health`, `/cron/tick`, `/hooks/push` and `/mcp`. Don't add other REST routes for app data. Hosted on Render's free plan (sleeps after ~15 idle minutes, no persistent disk — keep all state in Postgres); `main` auto-deploys.
 
 ### Routing
 [src/index.ts](src/index.ts) is the entrypoint: sets up Express middleware (`cors`, `helmet`, `pino-http`, `express.json()`) and mounts the single feature router:
 - `/auth` → [src/auth/route.ts](src/auth/route.ts)
 - `/health`, `/cron/tick`, `/hooks/push` → [src/notifications/route.ts](src/notifications/route.ts) (mounted at the root)
+- `POST /mcp` → [src/mcp/route.ts](src/mcp/route.ts) (mounted at the root)
 
 ### Feature folder pattern
 Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) and `route.ts` (wires handlers to an Express `Router`, exported as default). Route paths are verb-style rather than RESTful (e.g. `POST /auth/login`) — follow that style when adding endpoints.
@@ -32,6 +33,12 @@ Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) 
 - [push.ts](src/notifications/push.ts) `pushNotification(id)`: skips if already pushed, push is off, or it's quiet hours in Asia/Karachi (except `kind = test`); sends to every `push_subscriptions` row, deletes ones that answer 404/410, bumps `failure_count` on other errors, and sets `pushed_at` when at least one device got it.
 - [reminders.ts](src/notifications/reminders.ts) `runReminders(userId)`: once the Karachi time passes `morning_time` / `evening_time`, inserts that day's reminder with `dedupe_key` `morning:YYYY-MM-DD` / `evening:YYYY-MM-DD`; `on conflict do nothing` makes the 10-minute ticks idempotent.
 - `/hooks/push` always answers 200 once the secret matches, so Hasura doesn't retry things a retry can't fix.
+
+### MCP (Claude updates the board)
+- `POST /mcp` is an MCP server over **Streamable HTTP in stateless mode**: [route.ts](src/mcp/route.ts) builds a fresh `McpServer` + transport per request (JSON responses, no sessions; GET/DELETE answer 405). It requires `Authorization: Bearer $MCP_TOKEN` and answers 401 otherwise.
+- [server.ts](src/mcp/server.ts) registers the 12 tools (`list_projects`, `get_today`, `get_board`, `get_card`, `list_areas`, `create_project`, `create_area`, `create_card`, `update_card`, `add_comment`, `set_daily_note`, `send_notification`), each with `title`, `readOnlyHint` and `destructiveHint` annotations. **There are no delete tools on purpose.**
+- [board.ts](src/mcp/board.ts) does the data access with Knex, always scoped to `OWNER_USER_ID`; writes are marked `created_by`/`author = 'claude'`; cards are addressed by key (`STORY-12`), never uuid; dates are `YYYY-MM-DD` in Asia/Karachi. A `ToolError` becomes a readable `isError` result; anything else becomes a generic error.
+- It talks to Postgres directly rather than through Hasura with the admin secret: same database and same triggers (card numbers, `done_on`, the `notification_created` push), one less secret on Render.
 
 ### Shared middleware
 [src/middleware/auth.ts](src/middleware/auth.ts) exports the single `authMiddleware` used by every protected route — it verifies the JWT (`jwt.verify(token, process.env.JWT_SECRET)`) and sets `req.user = { id: decoded.sub }`. Import it as `../middleware/auth`; do not add per-feature copies. The `auth` login/register/forgot-password/reset-password routes are intentionally unprotected — only `GET /auth/me` is guarded.
@@ -46,7 +53,7 @@ Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) 
 [src/config/db.ts](src/config/db.ts) exports a single Knex instance (`pg`) configured from `PG_CONNECTION_STRING`. There is no migration framework and no schema files in the repo — table schemas (`users`, `password_resets`) must be inferred from the queries; schema changes are run manually against Neon. The v2 tables (projects, cards, notifications, push_subscriptions, notification_settings, …) are created by migrations in Progress-Tracker-Hasura; this API reads and writes them directly with Knex. Inserting into `notifications` fires the Hasura event trigger `notification_created`, even when the insert comes from here.
 
 ### Env vars
-`PG_CONNECTION_STRING`, `JWT_SECRET`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `FRONTEND_URL` (used to build the password-reset link), `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET` (the `?key=` cron-job.org sends), `HOOK_SECRET` (the `x-hook-secret` header Hasura's event trigger sends). Locally in `.env` (gitignored); in production they are Render environment variables.
+`PG_CONNECTION_STRING`, `JWT_SECRET`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `FRONTEND_URL` (used to build the password-reset link), `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET` (the `?key=` cron-job.org sends), `HOOK_SECRET` (the `x-hook-secret` header Hasura's event trigger sends), `MCP_TOKEN` (the Bearer token Claude's custom connector sends to `/mcp`), `OWNER_USER_ID` (the `users.id` whose board the MCP tools read and write). Locally in `.env` (gitignored); in production they are Render environment variables.
 
 ## Conventions
 
