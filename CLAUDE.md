@@ -35,9 +35,9 @@ Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) 
 - `/hooks/push` always answers 200 once the secret matches, so Hasura doesn't retry things a retry can't fix.
 
 ### MCP (Claude updates the board)
-- `POST /mcp` is an MCP server over **Streamable HTTP in stateless mode**: [route.ts](src/mcp/route.ts) builds a fresh `McpServer` + transport per request (JSON responses, no sessions; GET/DELETE answer 405). It requires `Authorization: Bearer $MCP_TOKEN` and answers 401 otherwise.
+- `POST /mcp` is an MCP server over **Streamable HTTP in stateless mode**: [route.ts](src/mcp/route.ts) builds a fresh `McpServer` + transport per request (JSON responses, no sessions; GET/DELETE answer 405). It requires `Authorization: Bearer <personal token>` and answers 401 otherwise. Users create tokens on the website's "Connect Claude" page; only a SHA-256 hash is stored in `mcp_tokens` (table and permissions in Progress-Tracker-Hasura). [context.ts](src/mcp/context.ts) hashes the bearer token, finds its `user_id` (refreshing `last_used_at` at most every 5 minutes) and runs the request inside an `AsyncLocalStorage`, so every tool works on that user's board.
 - [server.ts](src/mcp/server.ts) registers the 12 tools (`list_projects`, `get_today`, `get_board`, `get_card`, `list_areas`, `create_project`, `create_area`, `create_card`, `update_card`, `add_comment`, `set_daily_note`, `send_notification`), each with `title`, `readOnlyHint` and `destructiveHint` annotations. **There are no delete tools on purpose.**
-- [board.ts](src/mcp/board.ts) does the data access with Knex, always scoped to `OWNER_USER_ID`; writes are marked `created_by`/`author = 'claude'`; cards are addressed by key (`STORY-12`), never uuid; dates are `YYYY-MM-DD` in Asia/Karachi. A `ToolError` becomes a readable `isError` result; anything else becomes a generic error.
+- [board.ts](src/mcp/board.ts) does the data access with Knex, always scoped to the token's user via `ownerId()`; writes are marked `created_by`/`author = 'claude'`; cards are addressed by key (`STORY-12`), never uuid; dates are `YYYY-MM-DD` in Asia/Karachi. A `ToolError` becomes a readable `isError` result; anything else becomes a generic error.
 - It talks to Postgres directly rather than through Hasura with the admin secret: same database and same triggers (card numbers, `done_on`, the `notification_created` push), one less secret on Render.
 
 ### Shared middleware
@@ -53,7 +53,7 @@ Each feature lives under `src/<feature>/` with `controller.ts` (route handlers) 
 [src/config/db.ts](src/config/db.ts) exports a single Knex instance (`pg`) configured from `PG_CONNECTION_STRING`. There is no migration framework and no schema files in the repo — table schemas (`users`, `password_resets`) must be inferred from the queries; schema changes are run manually against Neon. The v2 tables (projects, cards, notifications, push_subscriptions, notification_settings, …) are created by migrations in Progress-Tracker-Hasura; this API reads and writes them directly with Knex. Inserting into `notifications` fires the Hasura event trigger `notification_created`, even when the insert comes from here.
 
 ### Env vars
-`PG_CONNECTION_STRING`, `JWT_SECRET`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `FRONTEND_URL` (used to build the password-reset link), `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET` (the `?key=` cron-job.org sends), `HOOK_SECRET` (the `x-hook-secret` header Hasura's event trigger sends), `MCP_TOKEN` (the Bearer token Claude's custom connector sends to `/mcp`), `OWNER_USER_ID` (the `users.id` whose board the MCP tools read and write). Locally in `.env` (gitignored); in production they are Render environment variables.
+`PG_CONNECTION_STRING`, `JWT_SECRET`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `FRONTEND_URL` (used to build the password-reset link), `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET` (the `?key=` cron-job.org sends), `HOOK_SECRET` (the `x-hook-secret` header Hasura's event trigger sends). Locally in `.env` (gitignored); in production they are Render environment variables.
 
 ## Conventions
 

@@ -1,31 +1,34 @@
-import crypto from "node:crypto";
-
 import {StreamableHTTPServerTransport} from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {type NextFunction, type Request, type Response, Router} from "express";
 
+import {hashToken, requestUser, userForToken} from "./context";
 import {buildServer} from "./server";
 
-/** Claude sends `Authorization: Bearer <MCP_TOKEN>` as a custom connector header. */
-function requireToken(req: Request, res: Response, next: NextFunction) {
-  const expected = process.env.MCP_TOKEN;
-
+/**
+ * Each user creates a personal token on the website's "Connect Claude" page and adds it to their
+ * Claude connector as `Authorization: Bearer <token>`. The token decides whose board is served.
+ */
+async function requireToken(req: Request, res: Response, next: NextFunction) {
   // Lenient on purpose: connector forms make it easy to type "Bearer<token>" without the space.
   const given = (req.headers.authorization ?? "")
     .trim()
     .replace(/^Bearer\s*/i, "")
     .trim();
-  const ok =
-    Boolean(expected) &&
-    given.length === expected?.length &&
-    crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected));
-  if (!ok) {
-    // A one-way fingerprint tells an old token from a new one in the logs without ever logging the token itself.
-    const fingerprint = given ? crypto.createHash("sha256").update(given).digest("hex").slice(0, 8) : "none";
-    req.log.warn({givenLength: given.length, fingerprint, configured: Boolean(expected)}, "mcp token rejected");
-    res.status(401).json({jsonrpc: "2.0", error: {code: -32001, message: "Unauthorized"}, id: null});
-    return;
+  try {
+    const userId = await userForToken(given);
+    if (userId === null) {
+      // A one-way fingerprint tells an old token from a new one in the logs without ever logging the token itself.
+      const fingerprint = given ? hashToken(given).slice(0, 8) : "none";
+      req.log.warn({givenLength: given.length, fingerprint}, "mcp token rejected");
+      res.status(401).json({jsonrpc: "2.0", error: {code: -32001, message: "Unauthorized"}, id: null});
+      return;
+    }
+    res.locals.userId = userId;
+    next();
+  } catch (err) {
+    req.log.error({err}, "mcp token lookup failed");
+    res.status(500).json({jsonrpc: "2.0", error: {code: -32603, message: "Internal error"}, id: null});
   }
-  next();
 }
 
 /**
@@ -42,8 +45,10 @@ router.post("/mcp", requireToken, async (req, res) => {
     server.close();
   });
   try {
-    await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
+    await requestUser.run(res.locals.userId, async () => {
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+    });
   } catch (err) {
     req.log.error({err}, "mcp request failed");
     if (!res.headersSent) {
