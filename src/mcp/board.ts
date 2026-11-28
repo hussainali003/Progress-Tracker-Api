@@ -128,7 +128,7 @@ export async function getToday() {
       .whereNot("p.status", "archived")
       .whereNot("c.status", "done")
       .select(...CARD_COLUMNS);
-  const [overdue, dueToday, inReview, dueThisWeek] = await Promise.all([
+  const [overdue, dueToday, inReview, dueThisWeek, waiting] = await Promise.all([
     open().where("c.due_date", "<", t).orderBy("c.due_date"),
     open().where("c.due_date", t).orderBy("c.sort_order"),
     open().where("c.status", "review").orderBy("c.sort_order"),
@@ -137,9 +137,11 @@ export async function getToday() {
       .where("c.due_date", "<=", week)
       .whereNot("c.status", "review")
       .orderBy("c.due_date"),
+    waitingQuery(50),
   ]);
   return {
     today: t,
+    waiting_for_claude: waiting.map((w) => w.key),
     overdue: overdue.map(publicCard),
     due_today: dueToday.map(publicCard),
     in_review: inReview.map(publicCard),
@@ -314,4 +316,41 @@ export async function sendNotification(args: {title: string; body?: string; card
     .insert({user_id: ownerId(), kind: "claude", title: args.title, body: args.body ?? "", url, card_id: cardId})
     .returning(["created_at"]);
   return {sent: true, url, created_at: row.created_at};
+}
+
+/**
+ * Cards whose newest comment from the owner ("me") is newer than Claude's newest comment, oldest
+ * question first. These are the comments Claude still owes an answer to.
+ */
+function waitingQuery(limit: number) {
+  const lastClaude = pg.raw(
+    "coalesce((select max(k.created_at) from card_comments k where k.card_id = c.id and k.author = 'claude'), '-infinity'::timestamptz)",
+  );
+  return cardQuery()
+    .join(
+      pg("card_comments as m")
+        .select("m.card_id")
+        .max({waiting_since: "m.created_at"})
+        .where("m.author", "me")
+        .groupBy("m.card_id")
+        .as("w"),
+      "w.card_id",
+      "c.id",
+    )
+    .where("w.waiting_since", ">", lastClaude)
+    .select(...CARD_COLUMNS, "w.waiting_since")
+    .orderBy("w.waiting_since", "asc")
+    .limit(limit);
+}
+
+/** The cards waiting for Claude's reply, each with its full details and comment thread. */
+export async function getWaitingComments(limit = 5) {
+  const rows = await waitingQuery(Math.min(Math.max(limit, 1), 20));
+  const cards = await Promise.all(rows.map((r) => getCard(r.key)));
+  const total = (await waitingQuery(1000)).length;
+  return {
+    waiting_total: total,
+    returned: cards.length,
+    cards: cards.map((card, i) => ({...card, waiting_since: rows[i].waiting_since})),
+  };
 }
