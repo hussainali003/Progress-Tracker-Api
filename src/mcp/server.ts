@@ -9,6 +9,7 @@ import {
   getBoard,
   getCard,
   getToday,
+  getWaitingComments,
   listAreas,
   listProjects,
   STATUSES,
@@ -63,10 +64,22 @@ export function buildServer() {
     {
       title: "Get today",
       description:
-        "Across all non-archived projects: overdue cards, cards due today, cards in review and cards due in the next 7 days.",
+        "Across all non-archived projects: overdue cards, cards due today, cards in review, cards due in the next 7 days, and the keys of cards waiting for Claude's reply to a comment.",
       annotations: {title: "Get today", ...READ},
     },
     () => run(getToday),
+  );
+
+  server.registerTool(
+    "get_waiting_comments",
+    {
+      title: "Get comments waiting for Claude",
+      description:
+        "Cards where the owner's newest comment hasn't been answered by Claude yet, oldest first, each with full details and comments. waiting_total says how many are waiting in all. Reply with add_comment; a card stops waiting once Claude has commented after the owner.",
+      inputSchema: {limit: z.number().int().min(1).max(20).optional().describe("How many cards to return (default 5)")},
+      annotations: {title: "Get comments waiting for Claude", ...READ},
+    },
+    ({limit}) => run(() => getWaitingComments(limit)),
   );
 
   server.registerTool(
